@@ -109,7 +109,7 @@ sudo yum -y install wget gcc gcc-c++ autoconf automake make
 ### 安装 VPN 脚本 ss.sh:
 
 ```
-wget –no-check-certificate -O ss.sh https://raw.githubusercontent.com/sucong426/VPN/main/ss.sh
+wget –no-check-certificate -O ss.sh https://raw.githubusercontent.com/amo416/VPN/main/ss.sh
 ```
 
 ### 执行脚本
