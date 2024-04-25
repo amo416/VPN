@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
-export PATH
+
 #=================================================================#
-#   System Required:  CentOS 6+, Debian 7+, Ubuntu 12+            #
+#   System Required:  Debian 7+, Ubuntu 12+                       #
 #   Description: One click Install Shadowsocks-Python server      #
 #   Author: Teddysun <i@teddysun.com>                             #
 #   Thanks: @clowwindy <https://twitter.com/clowwindy>            #
@@ -23,7 +22,7 @@ libsodium_file="libsodium-1.0.18"
 libsodium_url="https://github.com/jedisct1/libsodium/releases/download/1.0.18-RELEASE/libsodium-1.0.18.tar.gz"
 
 # Current folder
-cur_dir=`pwd`
+cur_dir=$(pwd)
 # Stream Ciphers
 ciphers=(
 aes-256-gcm
@@ -60,7 +59,7 @@ disable_selinux(){
     fi
 }
 
-#Check system
+# Check system
 check_sys(){
     local checkType=$1
     local value=$2
@@ -68,27 +67,12 @@ check_sys(){
     local release=''
     local systemPackage=''
 
-    if [[ -f /etc/redhat-release ]]; then
-        release="centos"
-        systemPackage="yum"
-    elif grep -Eqi "debian|raspbian" /etc/issue; then
+    if grep -Eqi "debian|raspbian" /etc/issue; then
         release="debian"
         systemPackage="apt"
     elif grep -Eqi "ubuntu" /etc/issue; then
         release="ubuntu"
         systemPackage="apt"
-    elif grep -Eqi "centos|red hat|redhat" /etc/issue; then
-        release="centos"
-        systemPackage="yum"
-    elif grep -Eqi "debian|raspbian" /proc/version; then
-        release="debian"
-        systemPackage="apt"
-    elif grep -Eqi "ubuntu" /proc/version; then
-        release="ubuntu"
-        systemPackage="apt"
-    elif grep -Eqi "centos|red hat|redhat" /proc/version; then
-        release="centos"
-        systemPackage="yum"
     fi
 
     if [[ "${checkType}" == "sysRelease" ]]; then
@@ -108,26 +92,10 @@ check_sys(){
 
 # Get version
 getversion(){
-    if [[ -s /etc/redhat-release ]]; then
-        grep -oE  "[0-9.]+" /etc/redhat-release
-    else
+    if grep -Eqi "debian|raspbian" /etc/issue; then
         grep -oE  "[0-9.]+" /etc/issue
-    fi
-}
-
-# CentOS version
-centosversion(){
-    if check_sys sysRelease centos; then
-        local code=$1
-        local version="$(getversion)"
-        local main_ver=${version%%.*}
-        if [ "$main_ver" == "$code" ]; then
-            return 0
-        else
-            return 1
-        fi
-    else
-        return 1
+    elif grep -Eqi "ubuntu" /etc/issue; then
+        grep -oE  "[0-9.]+" /etc/issue
     fi
 }
 
@@ -151,14 +119,16 @@ get_char(){
 
 # Pre-installation settings
 pre_install(){
-    if check_sys packageManager yum || check_sys packageManager apt; then
-        # Not support CentOS 5
-        if centosversion 5; then
-            echo -e "$[{red}Error${plain}] Not supported CentOS 5, please change to CentOS 6+/Debian 7+/Ubuntu 12+ and try again."
+    if check_sys packageManager apt; then
+        # Not support Debian 6
+        version="$(getversion)"
+        main_ver=${version%%.*}
+        if [ "$main_ver" == "6" ]; then
+            echo -e "[${red}Error${plain}] Not supported Debian 6, please change to Debian 7+ or Ubuntu 12+ and try again."
             exit 1
         fi
     else
-        echo -e "[${red}Error${plain}] Your OS is not supported. please change OS to CentOS/Debian/Ubuntu and try again."
+        echo -e "[${red}Error${plain}] Your OS is not supported. please change OS to Debian/Ubuntu and try again."
         exit 1
     fi
     # Set shadowsocks config password
@@ -223,13 +193,8 @@ pre_install(){
     echo "Press any key to start...or Press Ctrl+C to cancel"
     char=`get_char`
     # Install necessary dependencies
-    if check_sys packageManager yum; then
-        yum install -y python python-devel python-setuptools openssl openssl-devel curl wget unzip gcc automake autoconf make libtool
-    elif check_sys packageManager apt; then
-        apt-get -y update
-        apt-get -y install python python-dev python-setuptools openssl libssl-dev curl wget unzip gcc automake autoconf make libtool
-    fi
-    cd ${cur_dir}
+    apt-get -y update
+    apt-get -y install python python-dev python-setuptools openssl libssl-dev curl wget unzip gcc automake autoconf make libtool
 }
 
 # Download files
@@ -243,18 +208,6 @@ download_files(){
     if ! wget --no-check-certificate -O shadowsocks-master.zip https://github.com/shadowsocks/shadowsocks/archive/master.zip; then
         echo -e "[${red}Error${plain}] Failed to download shadowsocks python file!"
         exit 1
-    fi
-    # Download Shadowsocks init script
-    if check_sys packageManager yum; then
-        if ! wget --no-check-certificate https://raw.githubusercontent.com/teddysun/shadowsocks_install/master/shadowsocks -O /etc/init.d/shadowsocks; then
-            echo -e "[${red}Error${plain}] Failed to download shadowsocks chkconfig file!"
-            exit 1
-        fi
-    elif check_sys packageManager apt; then
-        if ! wget --no-check-certificate https://raw.githubusercontent.com/teddysun/shadowsocks_install/master/shadowsocks-debian -O /etc/init.d/shadowsocks; then
-            echo -e "[${red}Error${plain}] Failed to download shadowsocks chkconfig file!"
-            exit 1
-        fi
     fi
 }
 
@@ -277,31 +230,13 @@ EOF
 # Firewall set
 firewall_set(){
     echo -e "[${green}Info${plain}] firewall set start..."
-    if centosversion 6; then
-        /etc/init.d/iptables status > /dev/null 2>&1
-        if [ $? -eq 0 ]; then
-            iptables -L -n | grep -i ${shadowsocksport} > /dev/null 2>&1
-            if [ $? -ne 0 ]; then
-                iptables -I INPUT -m state --state NEW -m tcp -p tcp --dport ${shadowsocksport} -j ACCEPT
-                iptables -I INPUT -m state --state NEW -m udp -p udp --dport ${shadowsocksport} -j ACCEPT
-                /etc/init.d/iptables save
-                /etc/init.d/iptables restart
-            else
-                echo -e "[${green}Info${plain}] port ${shadowsocksport} has already been set up."
-            fi
-        else
-            echo -e "[${yellow}Warning${plain}] iptables looks like shutdown or not installed, please manually set it if necessary."
-        fi
-    elif centosversion 7; then
-        systemctl status firewalld > /dev/null 2>&1
-        if [ $? -eq 0 ]; then
-            default_zone=$(firewall-cmd --get-default-zone)
-            firewall-cmd --permanent --zone=${default_zone} --add-port=${shadowsocksport}/tcp
-            firewall-cmd --permanent --zone=${default_zone} --add-port=${shadowsocksport}/udp
-            firewall-cmd --reload
-        else
-            echo -e "[${yellow}Warning${plain}] firewalld looks like not running or not installed, please enable port ${shadowsocksport} manually if necessary."
-        fi
+    default_zone=$(ufw status | grep -oP '(?<=Status: ).*')
+    if [ "${default_zone}" == "active" ]; then
+        ufw allow ${shadowsocksport}/tcp
+        ufw allow ${shadowsocksport}/udp
+        ufw reload
+    else
+        echo -e "[${yellow}Warning${plain}] ufw looks like not running or not installed, please enable port ${shadowsocksport} manually if necessary."
     fi
     echo -e "[${green}Info${plain}] firewall set completed..."
 }
@@ -332,16 +267,11 @@ install(){
     fi
 
     cd ${cur_dir}/shadowsocks-master
-    python3 setup.py install --record /usr/local/shadowsocks_install.log
+    python setup.py install --record /usr/local/shadowsocks_install.log
 
     if [ -f /usr/bin/ssserver ] || [ -f /usr/local/bin/ssserver ]; then
         chmod +x /etc/init.d/shadowsocks
-        if check_sys packageManager yum; then
-            chkconfig --add shadowsocks
-            chkconfig shadowsocks on
-        elif check_sys packageManager apt; then
-            update-rc.d -f shadowsocks defaults
-        fi
+        update-rc.d -f shadowsocks defaults
         /etc/init.d/shadowsocks start
     else
         echo
@@ -380,11 +310,7 @@ uninstall_shadowsocks(){
         if [ $? -eq 0 ]; then
             /etc/init.d/shadowsocks stop
         fi
-        if check_sys packageManager yum; then
-            chkconfig --del shadowsocks
-        elif check_sys packageManager apt; then
-            update-rc.d -f shadowsocks remove
-        fi
+        update-rc.d -f shadowsocks remove
         # delete config file
         rm -f /etc/shadowsocks.json
         rm -f /var/run/shadowsocks.pid
@@ -407,9 +333,7 @@ install_shadowsocks(){
     pre_install
     download_files
     config_shadowsocks
-    if check_sys packageManager yum; then
-        firewall_set
-    fi
+    firewall_set
     install
     install_cleanup
 }
